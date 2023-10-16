@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    canvas {
+      display: block;
+    }
+    #footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: yellow;
+      text-align: center;
+      padding: 10px 0;
+    }
+    #game-over-screen {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      text-align: center;
+      z-index: 2;
+    }
+    #game-over-text {
+      color: white;
+      font-size: 36px;
+      margin-top: 20%;
+    }
+    #score-text {
+      color: white;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    #restart-button {
+      padding: 10px 20px;
+      background-color: green;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    #ability-container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+    }
+    #ability-circle {
+      width: 50px;
+      height: 50px;
+      background-color: transparent;
+      border: 2px solid yellow;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 24px;
+      color: yellow;
+      cursor: pointer;
+    }
+    #kill-count {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 24px;
+    }
+    #pause-button {
+      position: absolute;
+      top: 60px;
+      left: 20px;
+      padding: 10px 20px;
+      background-color: red;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    #pause-screen {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      text-align: center;
+      z-index: 2;
+    }
+    #pause-text {
+      color: white;
+      font-size: 36px;
+      margin-top: 20%;
+    }
+    #continue-button {
+      padding: 10px 20px;
+      background-color: green;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="footer">Restart button and power up button activating with key 'e' are not functional. Please either reload the page for a new round and click on the powerup instead.</div>
+  <div id="game-over-screen">
+    <div id="game-over-text">Game Over</div>
+    <div id="score-text">Score: <span id="score">0</span></div>
+    <button id="restart-button">Restart</button>
+  </div>
+  <div id="ability-container">
+    <div id="ability-circle">E</div>
+  </div>
+  <div id="kill-count">Kill Count: <span id="live-kill-count">0</span></div>
+  <div id="pause-button">Pause</div>
+  <div id="pause-screen">
+    <div id="pause-text">Game Paused</div>
+    <div id="pause-score-text">Score: <span id="pause-score">0</span></div>
+    <button id="continue-button">Continue</button>
+  </div>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight - 30; // Subtract 30 for the footer
+
+    const player = {
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      width: 40,
+      height: 40,
+      extensionWidth: 80,
+    };
+
+    const bullets = [];
+    const obstacles = [];
+    let score = 0;
+    let obstacleSpeed = 2;
+    let killCount = 0;
+
+    const gameOverScreen = document.getElementById("game-over-screen");
+    const restartButton = document.getElementById("restart-button");
+    const scoreText = document.getElementById("score");
+    const abilityCircle = document.getElementById("ability-circle");
+    const liveKillCount = document.getElementById("live-kill-count");
+    const pauseScreen = document.getElementById("pause-screen");
+    const continueButton = document.getElementById("continue-button");
+    const pauseButton = document.getElementById("pause-button");
+    const pauseScoreText = document.getElementById("pause-score-text");
+
+    let gameRunning = true;
+    let abilityReady = true;
+    let abilityReloadTime = 10000; // 10 seconds
+
+    function createObstacle() {
+      const side = Math.floor(Math.random() * 4);
+      let x, y;
+
+      switch (side) {
+        case 0: // Top
+          x = Math.random() * canvas.width;
+          y = -20;
+          break;
+        case 1: // Right
+          x = canvas.width + 20;
+          y = Math.random() * canvas.height;
+          break;
+        case 2: // Bottom
+          x = Math.random() * canvas.width;
+          y = canvas.height + 20;
+          break;
+        case 3: // Left
+          x = -20;
+          y = Math.random() * canvas.height;
+          break;
+      }
+
+      obstacles.push({ x, y, width: 20, height: 20, speed: obstacleSpeed });
+    }
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (gameRunning) {
+        player.angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+      }
+    });
+
+    canvas.addEventListener("click", () => {
+      if (gameRunning) {
+        bullets.push({
+          x: player.x + player.width / 2,
+          y: player.y,
+          speed: 10,
+          angle: player.angle,
+        });
+      }
+    });
+
+    abilityCircle.addEventListener("click", () => {
+      if (gameRunning && abilityReady) {
+        abilityReady = false;
+        bullets.push(
+          { x: player.x + player.width / 2, y: player.y, speed: 10, angle: 0 },
+          { x: player.x + player.width / 2, y: player.y, speed: 10, angle: Math.PI },
+          { x: player.x + player.width / 2, y: player.y, speed: 10, angle: Math.PI / 2 },
+          { x: player.x + player.width / 2, y: player.y, speed: 10, angle: (3 * Math.PI) / 2 }
+        );
+
+        // Show countdown
+        const abilityCountdown = document.createElement("div");
+        abilityCountdown.style.position = "absolute";
+        abilityCountdown.style.top = "30px";
+        abilityCountdown.style.right = "80px";
+        abilityCountdown.style.color = "yellow";
+        abilityCountdown.style.fontSize = "24px";
+        abilityCountdown.textContent = "10";
+        abilityCircle.appendChild(abilityCountdown);
+
+        // Start countdown
+        let countdownValue = 10;
+        const countdownInterval = setInterval(() => {
+          countdownValue--;
+          abilityCountdown.textContent = countdownValue;
+          if (countdownValue === 0) {
+            abilityCircle.removeChild(abilityCountdown);
+            abilityReady = true;
+            clearInterval(countdownInterval);
+          }
+        }, 1000);
+      }
+    });
+
+    pauseButton.addEventListener("click", () => {
+      if (gameRunning) {
+        pauseGame();
+      }
+    });
+
+    continueButton.addEventListener("click", () => {
+      continueGame();
+    });
+
+    function update() {
+      if (gameRunning) {
+        obstacles.forEach((obstacle) => {
+          const dx = player.x - obstacle.x;
+          const dy = player.y - obstacle.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance > 0) {
+            obstacle.x += (dx / distance) * obstacle.speed;
+            obstacle.y += (dy / distance) * obstacle.speed;
+          }
+
+          if (
+            player.x < obstacle.x + obstacle.width &&
+            player.x + player.width > obstacle.x &&
+            player.y < obstacle.y + obstacle.height &&
+            player.y + player.height > obstacle.y
+          ) {
+            gameRunning = false;
+            gameOver();
+          }
+        });
+
+        bullets.forEach((bullet, bulletIndex) => {
+          bullet.x += Math.cos(bullet.angle) * bullet.speed;
+          bullet.y += Math.sin(bullet.angle) * bullet.speed;
+
+          if (
+            bullet.x < 0 ||
+            bullet.x > canvas.width ||
+            bullet.y < 0 ||
+            bullet.y > canvas.height
+          ) {
+            bullets.splice(bulletIndex, 1);
+          }
+
+          obstacles.forEach((obstacle, obstacleIndex) => {
+            if (
+              bullet.x < obstacle.x + obstacle.width &&
+              bullet.x + 3 > obstacle.x &&
+              bullet.y < obstacle.y + obstacle.height &&
+              bullet.y + 3 > obstacle.y
+            ) {
+              obstacles.splice(obstacleIndex, 1);
+              bullets.splice(bulletIndex, 1);
+              score++;
+              liveKillCount.textContent = killCount + score;
+            }
+          });
+        });
+
+        if (obstacles.length < 4) {
+          createObstacle();
+        }
+
+        if (score >= 50) {
+          obstacleSpeed = 5 + Math.floor(score / 50);
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw player
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      ctx.rotate(player.angle);
+      ctx.fillStyle = "green";
+      ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
+      ctx.fillStyle = "blue";
+      ctx.fillRect(player.width / 2 - 3, -3, player.extensionWidth, 6);
+      ctx.restore();
+
+      // Draw bullets
+      bullets.forEach((bullet) => {
+        ctx.fillStyle = "blue";
+        ctx.fillRect(bullet.x, bullet.y, 5, 5);
+      });
+
+      // Draw obstacles (yellow squares)
+      obstacles.forEach((obstacle) => {
+        ctx.fillStyle = "yellow";
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      });
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+
+    function gameOver() {
+      gameOverScreen.style.display = "block";
+      scoreText.textContent = killCount + score;
+      gameOver();
+      restartButton.addEventListener("click", () => {
+        obstacles.length = 0;
+        bullets.length = 0;
+        gameRunning = true;
+        player.x = canvas.width / 2;
+        player.y = canvas.height / 2;
+        gameOverScreen.style.display = "none"; // Corrected line
+        score = 0;
+        liveKillCount.textContent = killCount + score;
+        obstacleSpeed += 0.5;
+      });
+    }
+    restartButton.addEventListener("click", () => {
+  obstacles.length = 0;
+  bullets.length = 0;
+  gameRunning = true;
+  player.x = canvas.width / 2;
+  player.y = canvas.height / 2;
+  gameOverScreen.style.display = "none";
+  score = 0;
+  liveKillCount.textContent = killCount + score;
+  obstacleSpeed = initialObstacleSpeed; // Add this line to reset the obstacle speed
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && gameRunning) {
+    pauseGame();
+  } else if (event.key === "Shift") {
+    activateAbility();
+  }
+});
+
+    function pauseGame() {
+      gameRunning = false;
+      pauseScreen.style.display = "block";
+      pauseScoreText.textContent = killCount + score;
+    }
+
+    function continueGame() {
+      gameRunning = true;
+      pauseScreen.style.display = "none";
+    }
+  </script>
+</body>
+</html>
